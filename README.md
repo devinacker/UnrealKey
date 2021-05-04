@@ -35,6 +35,6 @@ This has not been tested with a large number of games yet. If you have a UE4 gam
 
 ### License
 
-UnrealKey uses code from ![minhook](https://github.com/TsudaKageyu/minhook) (2-clause BSD license) and ![tiny-AES-c](https://github.com/kokke/tiny-AES-c) (public domain).
+UnrealKey uses code from [minhook](https://github.com/TsudaKageyu/minhook) (2-clause BSD license) and [tiny-AES-c](https://github.com/kokke/tiny-AES-c) (public domain).
 
 All other code is released under the MIT license. See COPYING.txt for details.
