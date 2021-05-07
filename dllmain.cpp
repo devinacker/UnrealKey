@@ -23,6 +23,8 @@ struct PakHeader
 };
 #pragma pack()
 
+static const DWORD PakMagic = 0x5a6f12e1;
+
 // track encrypted index locations that we've found
 struct PakIndex
 {
@@ -77,7 +79,7 @@ static void CheckPakHeader(HANDLE hFile, const PakHeaderOld *header, const GUID 
 	WCHAR path[MAX_PATH];
 	GetFinalPathNameByHandleW(hFile, path, MAX_PATH, 0);
 
-	if (header->bEncrypted)
+	if (header != NULL && header->bEncrypted)
 	{
 		SendStringMessage(L"Reading pak info for %ws (encrypted)", path);
 
@@ -191,13 +193,17 @@ static BOOL WINAPI hook_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nSize, LPD
 
 	if (ok)
 	{
-		if (*lpSize >= sizeof(PakHeader) && header->data.magic == 0x5a6f12e1)
+		if (*lpSize >= sizeof(PakHeader) && header->data.magic == PakMagic)
 		{
 			CheckPakHeader(hFile, &header->data, &header->guid);
 		}
-		else if (*lpSize >= sizeof(PakHeaderOld) && headerOld->magic == 0x5a6f12e1)
+		else if (*lpSize >= sizeof(PakHeaderOld) && headerOld->magic == PakMagic)
 		{
 			CheckPakHeader(hFile, headerOld);
+		}
+		else if (*lpSize >= sizeof(DWORD) && *(DWORD*)lpBuffer == PakMagic)
+		{
+			CheckPakHeader(hFile, NULL);
 		}
 		else for (auto &index : g_pakIndexes)
 		{
