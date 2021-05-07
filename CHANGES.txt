@@ -1,0 +1,8 @@
+v0.2.0 [2021-05-07]
+- Improved support for Steam games attempting to re-launch themselves through the Steam client
+  (must actually have Steam open and logged in)
+- Added detection of older unencrypted pak format
+- Slightly cleaner error handling in the event that DLL injection on the target process fails
+  
+v0.1.0 [2021-05-03]
+- Initial release

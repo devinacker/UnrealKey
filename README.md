@@ -27,7 +27,7 @@ Key:  0x0635D5F4B20E2CF1708524223DB7F1C77E7C49C556C5B875A90132E88E91F734
 
 Currently, only 64-bit Windows games are supported.
 
-Games using Steam DRM should work as long as the game is actually in your Steam library, but you will most likely need to add a valid `steam_appid.txt` file (containing the game's app ID) to the game executable's directory to prevent the game from trying to re-launch itself through the Steam client.
+Games using Steam DRM should work (_without_ needing to manually create a `steam_appid.txt` file), as long as the Steam client is open and logged in (and the game is actually in your library). If you're having trouble with a particular game, try running it through Steamless first.
 
 Games using anti-cheat software will most likely _not_ work, since this tool doesn't make any attempt to circumvent it.
 

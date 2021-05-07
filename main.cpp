@@ -5,7 +5,7 @@
 
 int main()
 {
-	printf("UnrealKey v0.1.0 - " __DATE__ "\n");
+	printf("UnrealKey v0.2.0 - " __DATE__ "\n");
 	printf("https://github.com/devinacker/UnrealKey\n\n");
 
 	int rc = 0;
