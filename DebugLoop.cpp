@@ -34,6 +34,8 @@ static bool g_running;
 // ----------------------------------------------------------------------------
 static void HandleNewProcess(DWORD pid, LPCWSTR filePath)
 {
+	bool ok = false;
+	HANDLE hFile = INVALID_HANDLE_VALUE;
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 
 	snprintf(g_path, sizeof(g_path), PIPE_NAME, pid);
@@ -43,31 +45,30 @@ static void HandleNewProcess(DWORD pid, LPCWSTR filePath)
 	if (hPipe == INVALID_HANDLE_VALUE)
 	{
 		PID_DEBUG("couldn't open named pipe (error 0x%x)\n", pid, GetLastError());
-		return;
 	}
 	else
 	{
 		g_namedPipes.push_back(hPipe);
+
+		PID_DEBUG("Starting %ws\n", pid, filePath);
+
+		GetCurrentDirectoryW(MAX_PATH, g_pathw);
+		std::wstring currentDir(g_pathw);
+
+		GetModuleFileNameW(NULL, g_pathw, MAX_PATH);
+		wcsrchr(g_pathw, L'\\')[1] = 0;
+		SetCurrentDirectoryW(g_pathw);
+
+		WIN32_FIND_DATAW findData = { 0 };
+		hFile = FindFirstFileW(L".\\UnrealKey64.dll", &findData);
+		wcscat_s(g_pathw, findData.cFileName);
+
+		SetCurrentDirectoryW(currentDir.c_str());
 	}
-
-	PID_DEBUG("starting %ws\n", pid, filePath);
-
-	GetCurrentDirectoryW(MAX_PATH, g_pathw);
-	std::wstring currentDir(g_pathw);
-
-	GetModuleFileNameW(NULL, g_pathw, MAX_PATH);
-	wcsrchr(g_pathw, L'\\')[1] = 0;
-	SetCurrentDirectoryW(g_pathw);
-	
-	WIN32_FIND_DATAW findData;
-	HANDLE hFile = FindFirstFileW(L".\\UnrealKey64.dll", &findData);
-
-	SetCurrentDirectoryW(currentDir.c_str());
 
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
 		// got DLL path, load it in the remote process
-		wcscat_s(g_pathw, findData.cFileName);
 
 		LPVOID procMem = VirtualAllocEx(hProcess, NULL, sizeof(g_pathw), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 		if (WriteProcessMemory(hProcess, procMem, g_pathw, sizeof(g_pathw), NULL))
@@ -79,23 +80,40 @@ static void HandleNewProcess(DWORD pid, LPCWSTR filePath)
 			if (hThread)
 			{
 				WaitForSingleObject(hThread, INFINITE);
+
+				DWORD exitCode;
+				if (GetExitCodeThread(hThread, &exitCode) && exitCode)
+				{
+					ok = true;
+				}
+				else
+				{
+					PID_DEBUG("Remote thread init error\n", pid);
+				}
+
 				CloseHandle(hThread);
 			}
 			else
 			{
-				PID_DEBUG("couldn't start remote thread\n", pid);
+				PID_DEBUG("Couldn't start remote thread (error 0x%x)\n", pid, GetLastError());
 			}
 		}
 		else
 		{
-			PID_DEBUG("couldn't write to process memory\n", pid);
+			PID_DEBUG("Couldn't write to process memory (error 0x%x)\n", pid, GetLastError());
 		}
 
 		FindClose(hFile);
 	}
 	else
 	{
-		PID_DEBUG("couldn't find UnrealKey64.dll\n", pid);
+		PID_DEBUG("Couldn't find UnrealKey64.dll\n", pid);
+	}
+
+	if (!ok)
+	{
+		// can't do anything useful here, just leave
+		TerminateProcess(hProcess, 1);
 	}
 
 	CloseHandle(hProcess);

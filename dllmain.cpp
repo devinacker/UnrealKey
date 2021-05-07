@@ -238,7 +238,7 @@ static NTSTATUS hook_ZwSetInformationThread(HANDLE hThread, ULONG infoClass, PVO
 }
 
 // ----------------------------------------------------------------------------
-static void Init()
+static BOOL Init()
 {
 	CHAR pipeName[MAX_PATH];
 
@@ -251,8 +251,7 @@ static void Init()
 	}
 	else
 	{
-		sprintf_s(pipeName, "Couldn't open pipe for pid=%d (error=%x)", GetCurrentProcessId(), GetLastError());
-		MessageBoxA(GetForegroundWindow(), pipeName, NULL, MB_OK);
+		return FALSE;
 	}
 
 	MH_STATUS hookStatus = MH_Initialize();
@@ -273,12 +272,16 @@ static void Init()
 		else
 		{
 			SendStringMessage(L"MinHook enable failed: %hs", MH_StatusToString(hookStatus));
+			return FALSE;
 		}
 	}
 	else
 	{
 		SendStringMessage(L"MinHook init failed: %hs", MH_StatusToString(hookStatus));
+		return FALSE;
 	}
+
+	return TRUE;
 }
 
 // ----------------------------------------------------------------------------
@@ -294,7 +297,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
-		Init();
+		return Init();
 		break;
 
 	case DLL_PROCESS_DETACH:
