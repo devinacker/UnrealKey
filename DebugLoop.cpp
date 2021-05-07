@@ -145,6 +145,13 @@ static void HandleIndexDataMessage(const PipeMessage& message)
 // ----------------------------------------------------------------------------
 static bool HandleSteamAppIDMessage(const PipeMessage& message)
 {
+	if (GetEnvironmentVariableA("SteamAppID", g_path, sizeof(g_path)) > 0)
+	{
+		PID_DEBUG("Already tried to restart with SteamAppID once, aborting...\n", message.pid);
+		PID_DEBUG("Make sure Steam is actually running.\n", message.pid);
+		return false;
+	}
+
 	snprintf(g_path, sizeof(g_path), "%u", message.msgUInt);
 
 	if (SetEnvironmentVariableA("SteamAppID", g_path))
