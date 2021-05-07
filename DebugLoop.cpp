@@ -52,12 +52,17 @@ static void HandleNewProcess(DWORD pid, LPCWSTR filePath)
 
 	PID_DEBUG("starting %ws\n", pid, filePath);
 
+	GetCurrentDirectoryW(MAX_PATH, g_pathw);
+	std::wstring currentDir(g_pathw);
+
 	GetModuleFileNameW(NULL, g_pathw, MAX_PATH);
 	wcsrchr(g_pathw, L'\\')[1] = 0;
 	SetCurrentDirectoryW(g_pathw);
 	
 	WIN32_FIND_DATAW findData;
 	HANDLE hFile = FindFirstFileW(L".\\UnrealKey64.dll", &findData);
+
+	SetCurrentDirectoryW(currentDir.c_str());
 
 	if (hFile != INVALID_HANDLE_VALUE)
 	{
@@ -135,6 +140,21 @@ static void HandleIndexDataMessage(const PipeMessage& message)
 	{
 		PID_DEBUG("Couldn't attach to process (error 0x%x)\n", message.pid, GetLastError());
 	}
+}
+
+// ----------------------------------------------------------------------------
+static bool HandleSteamAppIDMessage(const PipeMessage& message)
+{
+	snprintf(g_path, sizeof(g_path), "%u", message.msgUInt);
+
+	if (SetEnvironmentVariableA("SteamAppID", g_path))
+	{
+		PID_DEBUG("Set SteamAppID successfully, app will restart...\n", message.pid);
+		return true;
+	}
+
+	PID_DEBUG("Couldn't set SteamAppID (error 0x%x)\n", message.pid, GetLastError());
+	return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -255,6 +275,27 @@ static BOOL WINAPI CtrlHandler(DWORD type)
 }
 
 // ----------------------------------------------------------------------------
+static bool StartProcess(LPCWSTR appPath, HANDLE hJob, PROCESS_INFORMATION& pi)
+{
+	STARTUPINFO si = { 0 };
+	si.cb = sizeof(si);
+
+	if (!CreateProcessW(appPath, NULL, NULL, NULL, FALSE,
+		CREATE_SUSPENDED | CREATE_BREAKAWAY_FROM_JOB, NULL, NULL, &si, &pi))
+	{
+		printf("couldn't launch %ws (error 0x%x)\n", appPath, GetLastError());
+		return false;
+	}
+
+	HandleNewProcess(pi.dwProcessId, appPath);
+	AssignProcessToJobObject(hJob, pi.hProcess);
+	ResumeThread(pi.hThread);
+	CloseHandle(pi.hThread);
+
+	return true;
+}
+
+// ----------------------------------------------------------------------------
 int DebugLoop(LPCWSTR appPath)
 {
 	JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo = { 0 };
@@ -263,24 +304,15 @@ int DebugLoop(LPCWSTR appPath)
 	SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jobInfo, sizeof(jobInfo));
 
 	PROCESS_INFORMATION pi = { 0 };
-	STARTUPINFO si = { 0 };
-	si.cb = sizeof(si);
-
-	if (!CreateProcessW(appPath, NULL, NULL, NULL, FALSE,
-		CREATE_SUSPENDED | CREATE_BREAKAWAY_FROM_JOB, NULL, NULL, &si, &pi))
-	{
-		printf("couldn't launch %ws (error 0x%x)\n", appPath, GetLastError());
-		return 1;
-	}
 
 	printf("Starting the game now.\nClose the game or press Ctrl-C to stop.\n\n");
 
-	HandleNewProcess(pi.dwProcessId, appPath);
-	AssignProcessToJobObject(hJob, pi.hProcess);
-	ResumeThread(pi.hThread);
-	CloseHandle(pi.hThread);
+	if (!StartProcess(appPath, hJob, pi))
+		return 1;
 
 	g_running = true;
+	int rc = 0;
+	bool restart = false;
 	DEBUG_EVENT event;
 	PipeMessage message;
 	DWORD dwTemp;
@@ -294,6 +326,17 @@ int DebugLoop(LPCWSTR appPath)
 		{
 			PID_DEBUG("process exited with code 0x%x\n", pi.dwProcessId, dwTemp);
 			
+			// if we want to try to restart with a Steam App ID set (or something), do that now
+			if (restart)
+			{
+				restart = false;
+
+				if (StartProcess(appPath, hJob, pi))
+					continue;
+				else
+					rc = 1;
+			}
+
 			g_running = false;
 			break;
 		}
@@ -314,6 +357,10 @@ int DebugLoop(LPCWSTR appPath)
 
 				case IndexDataMessage:
 					HandleIndexDataMessage(message);
+					break;
+
+				case SteamAppIDMessage:
+					restart = HandleSteamAppIDMessage(message);
 					break;
 				}
 
@@ -405,5 +452,5 @@ int DebugLoop(LPCWSTR appPath)
 		printf("\n\n");
 	}
 
-	return 0;
+	return rc;
 }

@@ -36,18 +36,20 @@ std::vector<PakIndex> g_pakIndexes;
 static HANDLE g_hPipe;
 
 // WinAPI function hooks
-auto orig_ReadFile = ReadFile;
 auto orig_CreateProcessW = CreateProcessW;
+auto orig_ShellExecuteA = ShellExecuteA;
+auto orig_ShellExecuteW = ShellExecuteW;
+auto orig_ReadFile = ReadFile;
 NTSTATUS (*orig_ZwSetInformationThread)(HANDLE, ULONG, PVOID, ULONG);
 
 // ----------------------------------------------------------------------------
-static void SendPipeMessage(PipeMessage *msg)
+static void SendPipeMessage(PipeMessage& msg)
 {
-	msg->pid = GetCurrentProcessId();
-	msg->tid = GetCurrentThreadId();
+	msg.pid = GetCurrentProcessId();
+	msg.tid = GetCurrentThreadId();
 
 	DWORD dummy;
-	if (WriteFile(g_hPipe, msg, sizeof(*msg), &dummy, NULL))
+	if (WriteFile(g_hPipe, &msg, sizeof(msg), &dummy, NULL))
 	{
 		// wait for launcher to handle message
 		SuspendThread(GetCurrentThread());
@@ -65,7 +67,7 @@ static void SendStringMessage(const WCHAR *str, ...)
 	_vsnwprintf_s(msg.msgString, sizeof(msg.msgString) / sizeof(WCHAR), str, va);
 	va_end(va);
 
-	SendPipeMessage(&msg);
+	SendPipeMessage(msg);
 }
 
 // ----------------------------------------------------------------------------
@@ -116,7 +118,7 @@ static BOOL WINAPI hook_CreateProcessW(LPCWSTR name, LPWSTR cmdLine, LPSECURITY_
 
 		msg.msgProcess.pid = pi->dwProcessId;
 		msg.msgProcess.flags = flags;
-		SendPipeMessage(&msg);
+		SendPipeMessage(msg);
 
 		// if the process wasn't already supposed to be suspended, unsuspend it now
 		if (!(flags & CREATE_SUSPENDED))
@@ -128,6 +130,49 @@ static BOOL WINAPI hook_CreateProcessW(LPCWSTR name, LPWSTR cmdLine, LPSECURITY_
 	}
 
 	return FALSE;
+}
+
+// ----------------------------------------------------------------------------
+static void RunWithSteamAppID(UINT appID)
+{
+	SendStringMessage(L"Tried to launch Steam w/ app ID %u", appID);
+	
+	PipeMessage msg;
+	msg.msgType = SteamAppIDMessage;
+	msg.msgUInt = appID;
+	SendPipeMessage(msg);
+}
+
+// ----------------------------------------------------------------------------
+static HINSTANCE WINAPI hook_ShellExecuteA(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile, LPCSTR lpParams, LPCSTR lpDir, INT nShowCmd)
+{
+	UINT appID;
+
+	if (lpOperation && lpFile
+		&& !strcmp(lpOperation, "open")
+		&& sscanf_s(lpFile, "steam://run/%u", &appID) == 1)
+	{
+		RunWithSteamAppID(appID);
+		return 0;
+	}
+
+	return orig_ShellExecuteA(hwnd, lpOperation, lpFile, lpParams, lpDir, nShowCmd);
+}
+
+// ----------------------------------------------------------------------------
+static HINSTANCE WINAPI hook_ShellExecuteW(HWND hwnd, LPCWSTR lpOperation, LPCWSTR lpFile, LPCWSTR lpParams, LPCWSTR lpDir, INT nShowCmd)
+{
+	UINT appID;
+
+	if (lpFile && lpParams
+		&& wcsstr(lpFile, L"steam.exe")
+		&& swscanf_s(lpParams, L"steam://run/%u", &appID) == 1)
+	{
+		RunWithSteamAppID(appID);
+		return 0;
+	}
+
+	return orig_ShellExecuteW(hwnd, lpOperation, lpFile, lpParams, lpDir, nShowCmd);
 }
 
 // ----------------------------------------------------------------------------
@@ -174,7 +219,7 @@ static BOOL WINAPI hook_ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nSize, LPD
 			//	SendStringMessage(L"Reading encrypted pak index to 0x%p for %ws", lpBuffer, msg.msgIndex.filePath);
 				SendStringMessage(L"Reading encrypted pak index for %ws", wcsrchr(msg.msgIndex.filePath, L'\\') + 1);
 			//	SendStringMessage(L"Buffer size is 0x%x", nSize);
-				SendPipeMessage(&msg);
+				SendPipeMessage(msg);
 			}
 		}
 	}
@@ -214,6 +259,8 @@ static void Init()
 	if (!hookStatus)
 	{
 		MH_CreateHook(CreateProcessW, hook_CreateProcessW, (LPVOID*)&orig_CreateProcessW);
+		MH_CreateHook(ShellExecuteA, hook_ShellExecuteA, (LPVOID*)&orig_ShellExecuteA);
+		MH_CreateHook(ShellExecuteW, hook_ShellExecuteW, (LPVOID*)&orig_ShellExecuteW);
 		MH_CreateHook(ReadFile, hook_ReadFile, (LPVOID*)&orig_ReadFile);
 		MH_CreateHook(GetProcAddress(GetModuleHandleA("ntdll"), "ZwSetInformationThread"),
 			hook_ZwSetInformationThread, (LPVOID*)&orig_ZwSetInformationThread);
@@ -225,12 +272,12 @@ static void Init()
 		}
 		else
 		{
-			SendStringMessage(L"MinHook enable failed: %s", MH_StatusToString(hookStatus));
+			SendStringMessage(L"MinHook enable failed: %hs", MH_StatusToString(hookStatus));
 		}
 	}
 	else
 	{
-		SendStringMessage(L"MinHook init failed: %s", MH_StatusToString(hookStatus));
+		SendStringMessage(L"MinHook init failed: %hs", MH_StatusToString(hookStatus));
 	}
 }
 

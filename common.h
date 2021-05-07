@@ -9,6 +9,7 @@ enum PipeMessageType
 	StringMessage,
 	NewProcessMessage,
 	IndexDataMessage,
+	SteamAppIDMessage,
 };
 
 struct PipeProcessData
@@ -36,5 +37,6 @@ struct PipeMessage
 		WCHAR msgString[1024];
 		PipeProcessData msgProcess;
 		PipeIndexData msgIndex;
+		UINT msgUInt;
 	};
 };
