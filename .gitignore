@@ -1,4 +1,4 @@
 .vs
-.lib
-.x64
+lib
+x64
 *.vcxproj.user
