@@ -4,6 +4,8 @@ UnrealKey is a tool for automatically finding the AES-256 decryption keys for Un
 
 Pass the path to a game's executable as an argument to UnrealKey.exe, and it will launch the game and attempt to detect the loading and decryption of encrypted pak files. If successful, the decryption key(s) will appear in the output, usually within a few seconds of launching the game.
 
+__This project is a proof of concept and is not being actively developed or maintained.__
+
 ### Example output
 
 ```
@@ -30,8 +32,6 @@ Currently, only 64-bit Windows games are supported.
 Games using Steam DRM should work (_without_ needing to manually create a `steam_appid.txt` file), as long as the Steam client is open and logged in (and the game is actually in your library). If you're having trouble with a particular game, try running it through Steamless first.
 
 Games using anti-cheat software will most likely _not_ work, since this tool doesn't make any attempt to circumvent it.
-
-This has not been tested with a large number of games yet. If you have a UE4 game that uses encrypted pak files and UnrealKey doesn't seem to detect the decryption keys correctly, please open an issue and include the entire output from the program (but also please be sure to note the above as well).
 
 ### License
 
